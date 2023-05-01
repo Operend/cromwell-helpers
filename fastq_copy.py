@@ -14,21 +14,23 @@ def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
     ApiBacked.configure_from_dict(cfg)
     tsv_file = open(f"{temp_workfile_dir}/this_tsv_file.tsv", "w")
     tsv_file.write('SAMPLE_ID\tR1_ID\tR2_ID\tR1_NAME\tR2_NAME\n')
+    # expecting an entity that returns the fastq workfiles in
+    # an array: [r1,r2]
+    # Assumes at least r1 MUST Exist
     entities = Entity.get_by_query_params(fastq_query)
     for ent in entities:
-        r1 = ent.__getitem__('fastq_R1_file')
-        r2 = ent.__getitem__('fastq_R2_file')
+        wf_1_name = ""
+        wf_2_name = ""
+        wf_array = ent.__getitem__('workFiles')
+        r1 = ent.__getitem__('workFiles')[0]
+        wf_1_name = WorkFile.get_by_system_id(r1).originalName
 
-        # I know the ent shape before hand
-        wf1 = WorkFile.get_by_system_id(r1)
-        wf2 = WorkFile.get_by_system_id(r2)
-        # copy the workfiles
-        # for wf in [wf1,wf2]:
-        #		new_file = open(f"{temp_workfile_dir}/{wf.originalName}", "wb")
-        #		new_file.write(wf.open().read())
-        r1_path = f"{temp_workfile_dir}/{wf1.originalName}"
-        r2_path = f"{temp_workfile_dir}/{wf2.originalName}"
-        tsv_file.write(f"ample\t{r1}\t{r2}\t{wf1.originalName}\t{wf2.originalName}")
+        if len(wf_array) > 1:
+            r2 = ent.__getitem__('workFiles')[1]
+            wf_2_name = WorkFile.get_by_system_id(r2).originalName
+
+
+        tsv_file.write(f"ample\t{r1}\t{r2}\t{wf_1_name}\t{wf_2_name}\n")
 
 
 if __name__ == "__main__":
