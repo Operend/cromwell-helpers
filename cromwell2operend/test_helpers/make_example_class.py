@@ -18,13 +18,13 @@ def main():
     variables={}
     def add_variable(name, vtype):
         variables[name]=VariableDefinition(name,vtype);
-    add_variable("R1_id","I");
-    add_variable("R2_id","I");
-    add_variable("fastqc_1_html","F");
-    add_variable("fastqc_1_zip","F");
-    add_variable("fastqc_2_html","F");
-    add_variable("fastqc_2_zip","F");
-    add_variable("somalier_output","F");
+    add_variable("R1_id","T");
+    add_variable("R2_id","T");
+    add_variable("fastqc_1_html","W");
+    add_variable("fastqc_1_zip","W");
+    add_variable("fastqc_2_html","W");
+    add_variable("fastqc_2_zip","W");
+    add_variable("somalier_output","W");
     ec=EntityClass(class_name=class_name,variables=variables)
     ec.save();
     

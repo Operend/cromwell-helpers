@@ -2,7 +2,9 @@ import sys
 import os
 import argparse
 import json
-from opyrnd import ApiBacked, EntityClass, Entity;
+import numbers
+from opyrnd import ApiBacked, EntityClass, Entity
+from opyrnd.jobs import JobRun;
 
 
 class CromwellIO:
@@ -248,7 +250,61 @@ class IOMapping:
         ec=EntityClass.get_by_name(self.entity_class);
         if not ec:
             raise Exception(f"Operend server has no visible entity class named {self.entity_class}");
-        
+        for k in self.input_values:
+            if self.input_values[k] not in ec.variables:
+                raise Exception(f"Entity class does not have a variable named f{self.input_values[k]}");
+            vd=ec.variables[self.input_values[k]];
+            if vd.type=="W":
+                raise Exception("Entity class definition for field {self.input_values[k] expects a file, but mapping is for a non-file value");
+            for row in cromwell_io.input_rows.values():
+                if k in row and not self.validate_value_for_definition(row[k],vd):
+                    raise Exception(f"Entity class definition for field {self.input_values[k]} wants type {vd.type} and does not match Cromwell value {row[k]}");
+        for k in self.output_files:
+            if self.output_files[k] not in ec.variables:
+                raise Exception(f"Entity class does not have a variable named f{self.output_values[k]}");
+            vd=ec.variables[self.output_files[k]];
+            if vd.type!="W":
+                raise Exception(f"Entity class definition for field {self.input_values[k]} does not accept a file");
+            if vd.is_array:
+                # This can be supported if we need it! It's just an extra
+                # codepath that's hard to test without some real data that
+                # reaches it.
+                raise Exception(f"Entity class definition for field {self.input_values[k]} expects an array; cromwell2operend.py does not have a handler for this yet");
+    @staticmethod
+    def validate_value_for_definition(value,definition):
+        def validate_item(item):
+            if definition.type=="T":
+                return isinstance(item,str);
+            if definition.type=="F":
+                return isinstance(item,numbers.Real);
+            if definition.type=="I":
+                print (item)
+                print (type(item))
+                return isinstance(item,numbers.Integral);
+            if definition.type=="C":
+                for c in definition.codes:
+                    if value in c.keys():
+                        return True
+                return False
+            if definition.type=="W":
+                raise Exception("Hit unreachable case in validate_value_for_definition");
+            # If we need more fields, we can deal them in when they come up!
+            print(f"Support for entity variable type {definition.type} is unimplemented.");
+        if definition.is_array:
+            if isinstance(value,list):
+                for item in value:
+                    if not validate_item(item):
+                        return false;
+                return true;
+            else:
+                return false;
+        else:
+            if isinstance(value,list):
+                return false;
+            return validate_item(value);
+            
+
+            
     def open_file(self,fname):
         return open(self.mock_filename or fname);
             
@@ -265,8 +321,13 @@ def dry_run(metadata_filename, manifest_filename,
     table= CromwellIO(json.load(open(metadata_filename)));
     manifest=IOMapping(json.load(open(manifest_filename)), mock_filename);
     manifest.validate(table);
+    confirm_job_run_exists(job_run_id);
     dry_run_posts(table, manifest,
                   job_run_id, mock_filename);
+
+def confirm_job_run_exists(job_run_id):
+    if not JobRun.get_by_system_id(job_run_id):
+        raise Exception(f"No job run found with id {job_run_id}");
     
 def dry_run_posts(table, manifest,
                   job_run_id, mock_filename=None):
@@ -297,7 +358,7 @@ def dry_run_posts(table, manifest,
         print(f"would be posting entity {mock_entity}...");
     if job_run_id!=None:
         print(f"would be updating job run {job_run_id} with file outputs {jr_wfids}");
-
+        
         
 def main(argv):
     parser=argparse.ArgumentParser();
