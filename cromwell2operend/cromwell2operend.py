@@ -3,7 +3,7 @@ import os
 import argparse
 import json
 import numbers
-from opyrnd import ApiBacked, EntityClass, Entity
+from opyrnd import ApiBacked, EntityClass, Entity, WorkFile
 from opyrnd.jobs import JobRun;
 
 
@@ -321,16 +321,27 @@ def dry_run(metadata_filename, manifest_filename,
     table= CromwellIO(json.load(open(metadata_filename)));
     manifest=IOMapping(json.load(open(manifest_filename)), mock_filename);
     manifest.validate(table);
-    confirm_job_run_exists(job_run_id);
+    if job_run_id!=None:
+        confirm_job_run_exists(job_run_id);
     dry_run_posts(table, manifest,
-                  job_run_id, mock_filename);
+                  job_run_id);
 
+def full_run(metadata_filename, manifest_filename,
+                 job_run_id, mock_filename=None):
+    table= CromwellIO(json.load(open(metadata_filename)));
+    manifest=IOMapping(json.load(open(manifest_filename)), mock_filename);
+    manifest.validate(table);
+    if job_run_id!=None:
+        confirm_job_run_exists(job_run_id);
+    execute_posts(table, manifest,
+                  job_run_id);
+    
 def confirm_job_run_exists(job_run_id):
     if not JobRun.get_by_system_id(job_run_id):
         raise Exception(f"No job run found with id {job_run_id}");
     
 def dry_run_posts(table, manifest,
-                  job_run_id, mock_filename=None):
+                  job_run_id=None):
     next_wfid=101
     def mock_wfid():
         nonlocal next_wfid;
@@ -358,7 +369,59 @@ def dry_run_posts(table, manifest,
         print(f"would be posting entity {mock_entity}...");
     if job_run_id!=None:
         print(f"would be updating job run {job_run_id} with file outputs {jr_wfids}");
-        
+
+def execute_posts(table, manifest, job_run_id=None):
+    jr_wfids={}
+    for row in table.row_numbers:
+        entity_variables={}
+        for k in manifest.input_values:
+            if k in table.input_rows[row] and table.input_rows[row][k]!=None:
+                entity_variables[manifest.input_values[k]]=\
+                    table.input_rows[row][k]
+        for k in manifest.output_files:
+            if k in table.output_rows[row]:
+                fname=table.output_rows[row][k];
+                if manifest.mock_filename:
+                    real_fname=manifest.mock_filename
+                    print(f"POSTing file {fname} (really {real_fname}...",end="")
+                else:
+                    real_fname=fname
+                    print(f"POSTING file {fname}...",end="");
+                wf=WorkFile.post_from_file(real_fname);
+                wfid=wf.systemId;
+                print(f" wfid {wfid}")
+                field_name=manifest.output_files[k];
+                entity_variables[field_name]=wfid;
+                if field_name in jr_wfids:
+                    jr_wfids[field_name].append(wfid)
+                else:
+                    jr_wfids[field_name]=[wfid];
+        entity=Entity(manifest.entity_class,values=entity_variables)
+        print(f"POSTing entity {json.dumps(entity.to_dict())}...",end="");
+        entity.save();
+        print(f" entity id {entity.entity_id}")
+    if job_run_id!=None:
+        jr=JobRun.get_by_system_id(job_run_id);
+        mergeOutputWorkFileIds(jr,jr_wfids);
+        jr.status="COMPLETE"
+        print(f"updating job run {job_run_id} with file outputs {jr_wfids}... ",end="");        
+        jr.save();
+        print("complete")
+
+def mergeOutputWorkFileIds(jr,wfids_in):
+    if hasattr(jr,"outputWorkFileIds"):
+        wfids_out=jr.outputWorkFileIds;
+        if not wfids_out:
+            wfids_out={}
+    else:
+        wfids_out={}
+    for k in wfids_in:
+        if k not in wfids_out:
+            wfids_out[k]=[]
+        for v in wfids_in[k]:
+            if v not in wfids_out[k]:
+                wfids_out[k].append(v)
+    jr.outputWorkFileIds=wfids_out;
         
 def main(argv):
     parser=argparse.ArgumentParser();
