@@ -95,16 +95,16 @@ class CromwellIO:
                     row=shard_index
                 else:
                     if shard_index>-1:
-                        # if this happens, the row number logic is probably
-                        # wrong; we reach this point if we've already chosen
-                        # a row number based on a shard number, then inside
-                        # a workflow on that shard we see a shard number again.
-                        print(f"confused by subsharding, "
-                              "{parent_name} has too many {k}",
-                              file=sys.stderr);
-                        self.clean=False
-                    row=parent_row
-                if row>-1:
+                        # This is a finer-grain subshard being used by
+                        # one of the pipeline calls; this is the wrong workflow
+                        # granularity for an Entity row and can be ignored.
+                        # A later merge step in the pipeline has presumably
+                        # already consumed this output to synthesize something
+                        # at the granularity we're actually ETLing.
+                        row=None
+                    else:
+                        row=parent_row
+                if row!=None and row>-1:
                     if "inputs" in shards[i]:
                         for ki in shards[i]["inputs"]:                   
                             self.record_input(row,f"{k}.{ki}",
@@ -113,7 +113,7 @@ class CromwellIO:
                         for ki in shards[i]["outputs"]:
                             self.record_output(row,f"{k}.{ki}",
                                                shards[i]["outputs"][ki]);
-                if "subWorkflowMetadata" in shards[i]:
+                if row!=None and "subWorkflowMetadata" in shards[i]:
                     # if this happens, a case I didn't code for has arisen.
                     # It will be a quick fix to support if it ever happens;
                     # we just need to call gather_subcall_data recursively!
@@ -314,7 +314,7 @@ def very_dry_run(metadata_filename, manifest_filename,
     manifest=IOMapping(json.load(open(manifest_filename)), mock_filename);
     manifest.dry_validate(table);
     dry_run_posts(table, manifest,
-                  job_run_id, mock_filename);
+                  job_run_id);
 
 def dry_run(metadata_filename, manifest_filename,
                  job_run_id, mock_filename=None):
