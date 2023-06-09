@@ -1,0 +1,13 @@
+{"entityClass":"rnaseqETLForTesting",
+ "inputValues":{
+     "copyFastQs.R1_id":"R1_id",
+     "copyFastQs.R2_id":"R2_id"
+ },
+ "outputFiles":{
+     "rnaseq_pipeline_workflow.FASTQC.fastqc_1_html":"fastqc_1_html",
+     "rnaseq_pipeline_workflow.FASTQC.fastqc_1_zip":"fastqc_1_zip",
+     "rnaseq_pipeline_workflow.FASTQC.fastqc_2_html":"fastqc_2_html",
+     "rnaseq_pipeline_workflow.FASTQC.fastqc_2_zip":"fastqc_2_zip",
+     "rnaseq_pipeline_workflow.somalier_extract.somalier_output":"somalier_output"
+ }
+}
