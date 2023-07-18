@@ -290,7 +290,7 @@ class IOMapping:
         # check that every input value matches the entity class definition
         for k in self.input_values:
             if self.input_values[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named f{self.input_values[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.input_values[k]}");
             vd=ec.variables[self.input_values[k]];
             if vd.type=="W":
                 raise Exception("Entity class definition for field {self.input_values[k] expects a file, but mapping is for a non-file value");
@@ -300,7 +300,7 @@ class IOMapping:
         # check that every output value matches the entity class definition
         for k in self.output_values:
             if self.output_values[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named f{self.output_values[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.output_values[k]}");
             vd=ec.variables[self.output_values[k]];
             if vd.type=="W":
                 raise Exception(f"Entity class definition for field {self.output_values[k]} expects a file, but mapping is for a non-file value");
@@ -312,7 +312,7 @@ class IOMapping:
         # check that the definition is file-type and  of matching array-ness.
         for k in self.output_files:
             if self.output_files[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named f{self.output_files[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.output_files[k]}");
             vd=ec.variables[self.output_files[k]];
             if vd.type!="W":
                 raise Exception(f"Entity class definition for field {self.output_files[k]} does not accept a file, but mapping is for an output file");
@@ -485,7 +485,7 @@ def execute_posts(table, manifest, job_run_id=None):
                             real_fname=fname
                             print(f"POSTING file {one}...",end="");
                         one_wf=WorkFile.post_from_file(real_fname);
-                        one_wfid=wf.systemId;
+                        one_wfid=one_wf.systemId;
                         wfids.append(one_wfid);
                         print(f" wfid {one_wfid}")
                         if field_name in jr_wfids:
@@ -494,7 +494,7 @@ def execute_posts(table, manifest, job_run_id=None):
                             jr_wfids[field_name]=[one_wfid];
                     entity_variables[field_name]=wfids;
                 else:
-                    fname=fname;
+                    fname=fnames;
                     if manifest.mock_filename:
                         real_fname=manifest.mock_filename
                         print(f"POSTing file {fname} (really {real_fname}...",end="")
