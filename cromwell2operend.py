@@ -482,7 +482,7 @@ def execute_posts(table, manifest, job_run_id=None):
                             real_fname=manifest.mock_filename
                             print(f"POSTing file {one} (really {real_fname}...",end="")
                         else:
-                            real_fname=fname
+                            real_fname=one
                             print(f"POSTING file {one}...",end="");
                         one_wf=WorkFile.post_from_file(real_fname);
                         one_wfid=one_wf.systemId;
