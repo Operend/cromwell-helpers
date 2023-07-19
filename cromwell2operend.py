@@ -313,16 +313,18 @@ class IOMapping:
         # check that the definition is file-type and  of matching array-ness.
         for k in self.output_files:
             if self.output_files[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named {self.output_files[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.output_files[k]}");            
             vd=ec.variables[self.output_files[k]];
             if vd.type!="W":
                 raise Exception(f"Entity class definition for field {self.output_files[k]} does not accept a file, but mapping is for an output file");
-            if vd.is_array:
-                if not isinstance(self.output_files[k],list):                    
-                    raise Exception(f"Entity class definition for field {self.output_files[k]} expects an array, but encountered a non-array file.");
-            else:
-                if isinstance(self.output_files[k], list):
-                    raise Exception(f"Entity class definition for field {self.output_files[k]} expects a single file, but encountered an array.");
+            for row in cromwell_io.output_rows.values():
+                if k in row:
+                    if vd.is_array:
+                        if not isinstance(row[k],list):                    
+                            raise Exception(f"Entity class definition for field {self.output_files[k]} expects an array, but encountered a non-array file.");
+                    else:
+                        if isinstance(row[k], list):
+                            raise Exception(f"Entity class definition for field {self.output_files[k]} expects a single file, but encountered an array.");
     @staticmethod
     def is_legal_entity_value(value):
         # Is this value valid for _some_ supported entity variable type?
