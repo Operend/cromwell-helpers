@@ -277,9 +277,10 @@ class IOMapping:
                     # allow opening it for reading.
                     if isinstance(fname, list):
                         for eachfile in fname:
-                            self.open_file(eachfile).close();
+                            self.open_file(eachfile,k).close();
                     else:
-                        self.open_file(fname).close();
+                        # pass k just for info in case of exception
+                        self.open_file(fname,k).close();
     def validate(self, cromwell_io):
         # Local checks first...
         self.dry_validate(cromwell_io);
@@ -317,10 +318,10 @@ class IOMapping:
             if vd.type!="W":
                 raise Exception(f"Entity class definition for field {self.output_files[k]} does not accept a file, but mapping is for an output file");
             if vd.is_array:
-                if not isinstance(row[k],list):                    
+                if not isinstance(self.output_files[k],list):                    
                     raise Exception(f"Entity class definition for field {self.output_files[k]} expects an array, but encountered a non-array file.");
             else:
-                if isinstance(row[k], list):
+                if isinstance(self.output_files[k], list):
                     raise Exception(f"Entity class definition for field {self.output_files[k]} expects a single file, but encountered an array.");
     @staticmethod
     def is_legal_entity_value(value):
@@ -376,9 +377,9 @@ class IOMapping:
             
 
             
-    def open_file(self,fname):
+    def open_file(self,fname,field_name):
         if not isinstance(fname,str):
-            raise Exception(f"Expected a string filename, saw non-string value {fname}");            
+            raise Exception(f"Expected a string filename, saw non-string value {fname} for field {field_name}");            
         return open(self.mock_filename or fname);
             
 def very_dry_run(metadata_filename, manifest_filename,
