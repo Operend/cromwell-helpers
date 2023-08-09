@@ -305,9 +305,14 @@ class IOMapping:
             vd=ec.variables[self.output_values[k]];
             if vd.type=="W":
                 raise Exception(f"Entity class definition for field {self.output_values[k]} expects a file, but mapping is for a non-file value");
+            row_loop_number=0
             for row in cromwell_io.output_rows.values():
                 if k in row and not self.validate_value_for_definition(row[k],vd):
-                    raise Exception(f"Entity class definition for field {self.output_values[k]} wants type {vd.type} and does not match Cromwell value {row[k]}");            
+                    raise Exception(f"Entity class definition for field {self.output_values[k]} wants type {vd.type} and does not match Cromwell value {row[k]}");
+                if k not in row:
+                    raise Exception(f"Entity class definition for field {self.output_values[k]} wants a value but shard {row_loop_number} had none.");                  
+                row_loop_number=row_loop_number+1                
+
         # check that every output file matches the entity class definition.
         # dry_validate already checked for files locally, so we just
         # check that the definition is file-type and  of matching array-ness.
@@ -317,6 +322,7 @@ class IOMapping:
             vd=ec.variables[self.output_files[k]];
             if vd.type!="W":
                 raise Exception(f"Entity class definition for field {self.output_files[k]} does not accept a file, but mapping is for an output file");
+            row_loop_number=0
             for row in cromwell_io.output_rows.values():
                 if k in row:
                     if vd.is_array:
@@ -325,6 +331,9 @@ class IOMapping:
                     else:
                         if isinstance(row[k], list):
                             raise Exception(f"Entity class definition for field {self.output_files[k]} expects a single file, but encountered an array.");
+                else:
+                    raise Exception(f"Entity class definition for field {self.output_files[k]} expects file output, but shard {row_loop_number} had none.");
+                row_loop_number=row_loop_number+1                
     @staticmethod
     def is_legal_entity_value(value):
         # Is this value valid for _some_ supported entity variable type?
