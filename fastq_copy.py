@@ -3,7 +3,7 @@ from opyrnd.api_backed import ApiBacked
 from opyrnd.entities import Entity
 from opyrnd.workfile import WorkFile
 import argparse
-
+import os
 
 def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
                 fastq_query, temp_workfile_dir):
@@ -21,16 +21,27 @@ def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
     for ent in entities:
         wf_1_name = ""
         wf_2_name = ""
-        wf_array = ent.__getitem__('workFiles')
-        r1 = ent.__getitem__('workFiles')[0]
+        wf_array = ent.workfiles
+        r1 = ent.workfiles[0]
         wf_1_name = WorkFile.get_by_system_id(r1).originalName
+        # default name is file name without extension
+        samp_name = os.path.splitext(wf_1_name)[0]
+        # if underscore present (which should be for fastqs)
+        # use the left side of underscore
+        if "_" in wf_1_name:
+            samp_name = wf_1_name.split("_")[:-1]
+        
 
+        # need to update this logic when updating the data model
+        # oh boy - this better just be temp!
+        if "/" in samp_name:
+            samp_name = samp_name.split("/")[-1]
         if len(wf_array) > 1:
-            r2 = ent.__getitem__('workFiles')[1]
+            r2 = ent.workfiles[1]
             wf_2_name = WorkFile.get_by_system_id(r2).originalName
 
 
-        tsv_file.write(f"ample\t{r1}\t{r2}\t{wf_1_name}\t{wf_2_name}\n")
+        tsv_file.write(f"{samp_name}\t{r1}\t{r2}\t{wf_1_name}\t{wf_2_name}\n")
 
 
 if __name__ == "__main__":
