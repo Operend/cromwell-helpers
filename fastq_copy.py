@@ -21,23 +21,19 @@ def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
     for ent in entities:
         wf_1_name = ""
         wf_2_name = ""
-        wf_array = ent.workfiles
-        r1 = ent.workfiles[0]
+        wf_array = ent.__getitem__('workFiles')
+        r1 = wf_array[0]
         wf_1_name = WorkFile.get_by_system_id(r1).originalName
-        # default name is file name without extension
-        samp_name = os.path.splitext(wf_1_name)[0]
-        # if underscore present (which should be for fastqs)
-        # use the left side of underscore
-        if "_" in wf_1_name:
-            samp_name = wf_1_name.split("_")[:-1]
-        
+
+        samp_name = ent.__getitem__('name')
+
 
         # need to update this logic when updating the data model
         # oh boy - this better just be temp!
         if "/" in samp_name:
             samp_name = samp_name.split("/")[-1]
         if len(wf_array) > 1:
-            r2 = ent.workfiles[1]
+            r2 = wf_array[1]
             wf_2_name = WorkFile.get_by_system_id(r2).originalName
 
 
