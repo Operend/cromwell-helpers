@@ -3,7 +3,7 @@ from opyrnd.api_backed import ApiBacked
 from opyrnd.entities import Entity
 from opyrnd.workfile import WorkFile
 import argparse
-
+import os
 
 def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
                 fastq_query, temp_workfile_dir):
@@ -22,15 +22,22 @@ def copy_fastqs(api_base_url, api_token_secret, api_verify_https,
         wf_1_name = ""
         wf_2_name = ""
         wf_array = ent.__getitem__('workFiles')
-        r1 = ent.__getitem__('workFiles')[0]
+        r1 = wf_array[0]
         wf_1_name = WorkFile.get_by_system_id(r1).originalName
 
+        samp_name = ent.__getitem__('name')
+
+
+        # need to update this logic when updating the data model
+        # oh boy - this better just be temp!
+        if "/" in samp_name:
+            samp_name = samp_name.split("/")[-1]
         if len(wf_array) > 1:
-            r2 = ent.__getitem__('workFiles')[1]
+            r2 = wf_array[1]
             wf_2_name = WorkFile.get_by_system_id(r2).originalName
 
 
-        tsv_file.write(f"ample\t{r1}\t{r2}\t{wf_1_name}\t{wf_2_name}\n")
+        tsv_file.write(f"{samp_name}\t{r1}\t{r2}\t{wf_1_name}\t{wf_2_name}\n")
 
 
 if __name__ == "__main__":

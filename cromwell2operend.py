@@ -62,7 +62,12 @@ class CromwellIO:
             self.clean=False;
         else:
             self.output_rows[row][key]=value;
-            
+    def append_array_output(self,row,key,value):
+        if row not in self.output_rows:
+            self.output_rows[row]={}
+        if key not in self.output_rows[row]:
+            self.output_rows[row][key]=[]
+        self.output_rows[row][key].append(value);            
     def gather_data(self):
         for k in self.run_metadata["calls"]:
             shards=self.run_metadata["calls"][k];
@@ -95,12 +100,15 @@ class CromwellIO:
                     row=shard_index
                 else:
                     if shard_index>-1:
-                        # This is a finer-grain subshard being used by
-                        # one of the pipeline calls; this is the wrong workflow
-                        # granularity for an Entity row and can be ignored.
-                        # A later merge step in the pipeline has presumably
-                        # already consumed this output to synthesize something
-                        # at the granularity we're actually ETLing.
+                        # Special case: non-array file outputs that are an
+                        # extra subshard deep can be fetched by treating them
+                        # as an array of files.
+                        if "outputs" in shards[i]:
+                            for ki in shards[i]["outputs"]:
+                                self.append_array_output(
+                                    parent_row,
+                                    f"{k}.{ki}",
+                                    shards[i]["outputs"][ki]);
                         row=None
                     else:
                         row=parent_row
@@ -221,18 +229,43 @@ class IOMapping:
                     return False;
             return True;
         self.input_values=grab('inputValues',is_string_dict,'dict of strings');
-        self.output_files=grab('outputFiles',is_string_dict,'dict of strings');
-        if 'inputFiles' in manifest_data:
-            raise Exception("inputFiles is not yet supported.");
         if 'outputValues' in manifest_data:
-           raise Exception("outputValues is not yet supported.");
-        if len(manifest_data)>3:
-            raise Exception("Manifest contains keys other than entityClass, inputValues, and outputFiles.");
+           self.output_values=grab('outputValues',is_string_dict,
+                                'dict of strings');
+        else:
+            self.output_values={}
+        if 'outputFiles' in manifest_data:
+            self.output_files=grab('outputFiles',is_string_dict,
+                                   'dict of strings');
+        else:
+            self.output_files={}
+        if 'inputFiles' in manifest_data:
+            # Input files are complicated: do we want to pick them up
+            # and store them as new WorkFiles, or do we want to find the
+            # existing WorkFile that a given input file was downloaded from?
+            # If we are fetching WorkFiles in a pipeline step, then we
+            # can just track their IDs as input values and not have to track
+            # the actual files at all, which is a much simpler case.
+            raise Exception("inputFiles is not yet supported.");
+        for k in manifest_data:
+            if (k!='inputValues' and k!='outputValues' and k!='outputFiles' and
+                k!='entityClass'):
+                raise Exception(
+                    "Manifest contains keys other than entityClass, inputValues, outputValues, and outputFiles."
+                );
     def dry_validate(self, cromwell_io):
         for k in self.input_values:
             if not any( (k in row) for row in cromwell_io.input_rows.values()):
                 print (cromwell_io.input_rows[0].keys())
                 raise Exception(f"Manifest specifies input {k}, which is not found in the Cromwell metadata.");
+        for k in self.output_values:
+            if not any( (k in row) for row in cromwell_io.output_rows.values()):
+                raise Exception(f"Manifest specifies output {k}, which is not found in the Cromwell metadata.");
+        for k in self.output_values:
+            for row in cromwell_io.output_rows.values():
+                if k in row and row[k]!=None:
+                    if not self.is_legal_entity_value(k):
+                        raise Exception(f"Saw for output {k} a value of unsupported type: {row[k]}");            
         for k in self.output_files:
             if not any( (k in row) for row in cromwell_io.output_rows.values()):
                 raise Exception(f"Manifest specifies output {k}, which is not found in the Cromwell metadata.");
@@ -242,7 +275,12 @@ class IOMapping:
                     fname=row[k];
                     # Check that the file exists, and that permissions
                     # allow opening it for reading.
-                    self.open_file(fname).close();
+                    if isinstance(fname, list):
+                        for eachfile in fname:
+                            self.open_file(eachfile,k).close();
+                    else:
+                        # pass k just for info in case of exception
+                        self.open_file(fname,k).close();
     def validate(self, cromwell_io):
         # Local checks first...
         self.dry_validate(cromwell_io);
@@ -250,26 +288,73 @@ class IOMapping:
         ec=EntityClass.get_by_name(self.entity_class);
         if not ec:
             raise Exception(f"Operend server has no visible entity class named {self.entity_class}");
+        # check that every input value matches the entity class definition
         for k in self.input_values:
             if self.input_values[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named f{self.input_values[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.input_values[k]}");
             vd=ec.variables[self.input_values[k]];
             if vd.type=="W":
                 raise Exception("Entity class definition for field {self.input_values[k] expects a file, but mapping is for a non-file value");
             for row in cromwell_io.input_rows.values():
                 if k in row and not self.validate_value_for_definition(row[k],vd):
                     raise Exception(f"Entity class definition for field {self.input_values[k]} wants type {vd.type} and does not match Cromwell value {row[k]}");
+        # check that every output value matches the entity class definition
+        for k in self.output_values:
+            if self.output_values[k] not in ec.variables:
+                raise Exception(f"Entity class does not have a variable named {self.output_values[k]}");
+            vd=ec.variables[self.output_values[k]];
+            if vd.type=="W":
+                raise Exception(f"Entity class definition for field {self.output_values[k]} expects a file, but mapping is for a non-file value");
+            row_loop_number=0
+            for row in cromwell_io.output_rows.values():
+                if k in row and not self.validate_value_for_definition(row[k],vd):
+                    raise Exception(f"Entity class definition for field {self.output_values[k]} wants type {vd.type} and does not match Cromwell value {row[k]}");
+                if k not in row:
+                    raise Exception(f"Entity class definition for field {self.output_values[k]} wants a value but shard {row_loop_number} had none.");                  
+                row_loop_number=row_loop_number+1                
+
+        # check that every output file matches the entity class definition.
+        # dry_validate already checked for files locally, so we just
+        # check that the definition is file-type and  of matching array-ness.
         for k in self.output_files:
             if self.output_files[k] not in ec.variables:
-                raise Exception(f"Entity class does not have a variable named f{self.output_values[k]}");
+                raise Exception(f"Entity class does not have a variable named {self.output_files[k]}");            
             vd=ec.variables[self.output_files[k]];
             if vd.type!="W":
-                raise Exception(f"Entity class definition for field {self.input_values[k]} does not accept a file");
-            if vd.is_array:
-                # This can be supported if we need it! It's just an extra
-                # codepath that's hard to test without some real data that
-                # reaches it.
-                raise Exception(f"Entity class definition for field {self.input_values[k]} expects an array; cromwell2operend.py does not have a handler for this yet");
+                raise Exception(f"Entity class definition for field {self.output_files[k]} does not accept a file, but mapping is for an output file");
+            row_loop_number=0
+            for row in cromwell_io.output_rows.values():
+                if k in row:
+                    if vd.is_array:
+                        if not isinstance(row[k],list):                    
+                            raise Exception(f"Entity class definition for field {self.output_files[k]} expects an array, but encountered a non-array file.");
+                    else:
+                        if isinstance(row[k], list):
+                            raise Exception(f"Entity class definition for field {self.output_files[k]} expects a single file, but encountered an array.");
+                else:
+                    raise Exception(f"Entity class definition for field {self.output_files[k]} expects file output, but shard {row_loop_number} had none.");
+                row_loop_number=row_loop_number+1                
+    @staticmethod
+    def is_legal_entity_value(value):
+        # Is this value valid for _some_ supported entity variable type?
+        # If this is false, validate_value_for_definition has no
+        # definition that would be true.
+        def is_item_legal(item):
+            if isinstance(item,str): # "T" or "C"
+                return True
+            if isinstance(item,numbers.Real): # "F"
+                return True;
+            if isinstance(item,numbers.Integral): # "I"
+                return True;
+            return False;
+        if isinstance(value,list):
+            for item in value:
+                if not is_item_legal(item):
+                    return False
+            return True
+        else:
+            return is_item_legal(value);
+            
     @staticmethod
     def validate_value_for_definition(value,definition):
         def validate_item(item):
@@ -278,8 +363,6 @@ class IOMapping:
             if definition.type=="F":
                 return isinstance(item,numbers.Real);
             if definition.type=="I":
-                print (item)
-                print (type(item))
                 return isinstance(item,numbers.Integral);
             if definition.type=="C":
                 for c in definition.codes:
@@ -295,17 +378,19 @@ class IOMapping:
                 for item in value:
                     if not validate_item(item):
                         return false;
-                return true;
+                return True;
             else:
-                return false;
+                return False;
         else:
             if isinstance(value,list):
-                return false;
+                return False;
             return validate_item(value);
             
 
             
-    def open_file(self,fname):
+    def open_file(self,fname,field_name):
+        if not isinstance(fname,str):
+            raise Exception(f"Expected a string filename, saw non-string value {fname} for field {field_name}");            
         return open(self.mock_filename or fname);
             
 def very_dry_run(metadata_filename, manifest_filename,
@@ -355,17 +440,33 @@ def dry_run_posts(table, manifest,
         for k in manifest.input_values:
             if k in table.input_rows[row] and table.input_rows[row][k]!=None:
                 mock_entity[manifest.input_values[k]]=table.input_rows[row][k]
+        for k in manifest.output_values:
+            if k in table.output_rows[row] and table.output_rows[row][k]!=None:
+                mock_entity[manifest.output_values[k]]=table.output_rows[row][k]
         for k in manifest.output_files:
             if k in table.output_rows[row]:
-                fname=table.output_rows[row][k];
-                wfid=mock_wfid()
-                print(f"would be POSTing file {fname}... pretending it has wfid {wfid}");
                 field_name=manifest.output_files[k];
-                mock_entity[field_name]=wfid;
-                if field_name in jr_wfids:
-                    jr_wfids[field_name].append(wfid)
+                fnames=table.output_rows[row][k];
+                if isinstance(fnames,list):
+                    wfids=[]
+                    for one in fnames:                        
+                        one_wfid=mock_wfid();
+                        wfids.append(one_wfid)
+                        print(f"would be POSTing file {one}... pretending it has wfid {one_wfid}");           
+                        if field_name in jr_wfids:                    
+                            jr_wfids[field_name].append(one_wfid)
+                        else:
+                            jr_wfids[field_name]=[one_wfid];
+                    mock_entity[field_name]=wfids;                    
                 else:
-                    jr_wfids[field_name]=[wfid];
+                    fname=fnames
+                    wfid=mock_wfid()
+                    print(f"would be POSTing file {fname}... pretending it has wfid {wfid}");
+                    if field_name in jr_wfids:                    
+                        jr_wfids[field_name].append(wfid)
+                    else:
+                        jr_wfids[field_name]=[wfid];
+                    mock_entity[field_name]=wfid;
         print(f"would be posting entity {mock_entity}...");
     if job_run_id!=None:
         print(f"would be updating job run {job_run_id} with file outputs {jr_wfids}");
@@ -378,24 +479,48 @@ def execute_posts(table, manifest, job_run_id=None):
             if k in table.input_rows[row] and table.input_rows[row][k]!=None:
                 entity_variables[manifest.input_values[k]]=\
                     table.input_rows[row][k]
+        for k in manifest.output_values:
+            if k in table.output_rows[row] and table.output_rows[row][k]!=None:
+                entity_variables[manifest.output_values[k]]=\
+                    table.output_rows[row][k]
         for k in manifest.output_files:
             if k in table.output_rows[row]:
-                fname=table.output_rows[row][k];
-                if manifest.mock_filename:
-                    real_fname=manifest.mock_filename
-                    print(f"POSTing file {fname} (really {real_fname}...",end="")
-                else:
-                    real_fname=fname
-                    print(f"POSTING file {fname}...",end="");
-                wf=WorkFile.post_from_file(real_fname);
-                wfid=wf.systemId;
-                print(f" wfid {wfid}")
                 field_name=manifest.output_files[k];
-                entity_variables[field_name]=wfid;
-                if field_name in jr_wfids:
-                    jr_wfids[field_name].append(wfid)
+                fnames=table.output_rows[row][k];
+                if isinstance(fnames,list):
+                    wfids=[];
+                    for one in fnames:
+                        if manifest.mock_filename:
+                            real_fname=manifest.mock_filename
+                            print(f"POSTing file {one} (really {real_fname}...",end="")
+                        else:
+                            real_fname=one
+                            print(f"POSTING file {one}...",end="");
+                        one_wf=WorkFile.post_from_file(real_fname);
+                        one_wfid=one_wf.systemId;
+                        wfids.append(one_wfid);
+                        print(f" wfid {one_wfid}")
+                        if field_name in jr_wfids:
+                            jr_wfids[field_name].append(one_wfid)
+                        else:
+                            jr_wfids[field_name]=[one_wfid];
+                    entity_variables[field_name]=wfids;
                 else:
-                    jr_wfids[field_name]=[wfid];
+                    fname=fnames;
+                    if manifest.mock_filename:
+                        real_fname=manifest.mock_filename
+                        print(f"POSTing file {fname} (really {real_fname}...",end="")
+                    else:
+                        real_fname=fname
+                        print(f"POSTING file {fname}...",end="");
+                    wf=WorkFile.post_from_file(real_fname);
+                    wfid=wf.systemId;
+                    print(f" wfid {wfid}")
+                    if field_name in jr_wfids:
+                        jr_wfids[field_name].append(wfid)
+                    else:
+                        jr_wfids[field_name]=[wfid];
+                    entity_variables[field_name]=wfid;
         entity=Entity(manifest.entity_class,values=entity_variables)
         print(f"POSTing entity {json.dumps(entity.to_dict())}...",end="");
         entity.save();
