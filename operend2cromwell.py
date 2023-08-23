@@ -121,7 +121,12 @@ class TemplateFiller:
             return arr;
     def download_wanted_files(self):
         for v in self.wanted_file_ids:
-            file_path=os.path.join(self.download_dir,
+            wf = WorkFile.get_by_system_id(v);
+            #only use the orig name if its there!
+            if len(wf.originalName) > 0:
+                file_path=os.path.join(self.download_dir,wf.originalName)
+            else:
+                file_path=os.path.join(self.download_dir,
                                    "input_file_"+str(v));            
             file_exists = os.path.exists(file_path);            
             if self.mock_file:
@@ -129,7 +134,6 @@ class TemplateFiller:
                     shutil.copyfile(self.mock_file,
                                     file_path);
             else:
-                wf = WorkFile.get_by_system_id(v);
                 if file_exists:
                     hash_in_system = wf.hash;
                     with open(file_path,"rb") as f:
