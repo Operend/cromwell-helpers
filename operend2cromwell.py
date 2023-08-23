@@ -56,7 +56,7 @@ class TemplateFiller:
         json.dump(template, outfile,
                   default=lambda x:self.resolve_to_final_string(x));    
     def resolve_template_value(self, template_value):
-        if isinstance(template_value,int) or isinstance(template_value, float):
+        if not isinstance(template_value,str):
             return template_value;
         if isinstance(template_value,str):
             # ASSUMPTIONS (we can add more cases later if they come up;

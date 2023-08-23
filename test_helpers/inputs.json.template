@@ -2,5 +2,6 @@
 "_query":"_class=shape",
 "colorstr":"${this.color}",
 "constant":0,
-"graphic":"${this.graphic}"
+"graphic":"${this.graphic}",
+"constantArray":["Here's a string to preserve unchanged."]
 }
