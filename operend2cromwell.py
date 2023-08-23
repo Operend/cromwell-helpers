@@ -12,6 +12,8 @@ import os,os.path
 import argparse
 import json
 import hashlib
+import shutil
+
 from opyrnd import ApiBacked, Entity, WorkFile, EntityClass;
 
 class FileIdTemplate:
