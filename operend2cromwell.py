@@ -85,7 +85,7 @@ class TemplateFiller:
                     else:
                         return prefix+bracketed+suffix;
                 if bracketed.startswith("this."):
-                    fieldname=bracketed.removeprefix("this.");
+                    fieldname=bracketed[5:]
                     return self.make_array_for_fieldname(
                         fieldname, prefix, suffix)
             else:
