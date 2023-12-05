@@ -15,6 +15,7 @@ import hashlib
 import shutil
 
 from opyrnd import ApiBacked, Entity, WorkFile, EntityClass;
+from opyrnd.jobs import JobRun;
 
 class FileIdTemplate:
     def __init__(self,v,prefix,suffix):
@@ -52,6 +53,7 @@ class TemplateFiller:
             template_value=template[fieldname]
             template[fieldname]=self.resolve_template_value(template_value);
         self.download_wanted_files();
+        print("Downloaded the following files:");
         print(self.downloaded_file_paths)
         json.dump(template, outfile,
                   default=lambda x:self.resolve_to_final_string(x));    
@@ -152,7 +154,18 @@ class TemplateFiller:
         self.downloaded_file_paths[str(wf.systemId)]=file_path;
     def already_downloaded(self,wf,file_path):
         self.downloaded_file_paths[str(wf.systemId)]=file_path;
-        
+    def create_job_run(self, typename):
+        jr=JobRun(
+            {
+                "inputWorkFileIds":{
+                    "inputs":sorted(list(self.wanted_file_ids))
+                },
+                "jobTypeName": typename,
+                "status":"REQUESTED",
+            }
+        )
+        jr.save()
+        return jr.id
         
 def main(argv):
     parser=argparse.ArgumentParser();
@@ -162,6 +175,13 @@ def main(argv):
                         help="Filename to create of Cromwell input JSON");    
     parser.add_argument("DOWNLOADDIR",
                         help="Directory to download input file contents");
+    parser.add_argument("-j","--create-job-run",metavar="JOB_TYPE",
+                        help="After downloading, create a job run using this "+
+                        "type name, with the files as inputs.")
+    parser.add_argument("--job-run-file",
+                        help="(with -j/--create-job-run) Create "+
+                        "a file with this name that holds the new job run's "+
+                        "ID.")
     parser.add_argument("--mock-file",
                         help="use this filename for every file's contents "+
                         "instead of performing real downloads (for testing "+
@@ -182,10 +202,19 @@ def main(argv):
               "environment variable is required.");
         return;
     ApiBacked.configure_from_file(ini);
-    TemplateFiller(parsed_args.TEMPLATE,
-                   parsed_args.JSON_OUT,
-                   parsed_args.DOWNLOADDIR,
-                   parsed_args.mock_file).run()
+    filler=TemplateFiller(parsed_args.TEMPLATE,
+                          parsed_args.JSON_OUT,
+                          parsed_args.DOWNLOADDIR,
+                          parsed_args.mock_file)
+    filler.run()
+    if parsed_args.create_job_run:
+        job_id=filler.create_job_run(parsed_args.create_job_run)
+        print(f"Created job with id {job_id}");
+        if parsed_args.job_run_file:
+            jifile=open(parsed_args.job_run_file,"w")
+            jifile.write(str(job_id))
+            jifile.close()
+    print("Done pre-pipeline Operend integration.")
     
 if __name__=="__main__":
     main(sys.argv)
