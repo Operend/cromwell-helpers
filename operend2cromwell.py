@@ -64,7 +64,8 @@ class TemplateFiller:
             # ASSUMPTIONS (we can add more cases later if they come up;
             #  these are based on the cases we've seen Terra's GUI produce.)
             # - we don't have more than one ${}
-            # - a ${} body is either a number or a this.fieldname
+            # - a ${} body is either a number, a this.fieldname,
+            #   or a this.fieldname.id
             if "${" in template_value:
                 [prefix,rest]=template_value.split("${",1);
                 if "}" not in rest:
@@ -88,21 +89,26 @@ class TemplateFiller:
                         return prefix+bracketed+suffix;
                 if bracketed.startswith("this."):
                     fieldname=bracketed[5:]
+                    raw_id=False;
+                    if fieldname.endswith(".id"):
+                        fieldname=fieldname[:-3]
+                        raw_id=True
                     return self.make_array_for_fieldname(
-                        fieldname, prefix, suffix)
+                        fieldname, prefix, suffix, raw_id)
             else:
                 return template_value;
     def resolve_to_final_string(self,x):
         return x.prefix + self.downloaded_file_paths[str(x.value)]+x.suffix
-    def make_array_for_fieldname(self, fieldname, prefix, suffix):
+    def make_array_for_fieldname(self, fieldname, prefix, suffix, raw_id):
         if fieldname not in self.entity_class.variables:
             raise Exception("Field "+fieldname+
                             " not found in entity class "+
                             this.entity_class.name);
         vtype = self.entity_class.variables[fieldname].type
-        if vtype=="E":
+        if vtype=="E" and not raw_id:
             raise Exception("Field "+fieldname+
-                            " is a cross-entity reference (not implemented)");
+                            " is a cross-entity reference (not implemented), "+
+                            " did you mean "+fieldname+".id?");
         entity_values=[]
         for e in self.entities:            
             if fieldname not in e.values or e.values[fieldname]==None:
@@ -110,7 +116,7 @@ class TemplateFiller:
                                 " is not present in entity "+
                                 str(e.entity_id));            
             entity_values.append(e.values[fieldname]);        
-        if vtype=="W":
+        if vtype=="W" and not raw_id:
             arr=[]
             for v in entity_values:
                 self.wanted_file_ids.add(v);
